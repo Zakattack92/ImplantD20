@@ -7,39 +7,29 @@
 <style>
   :root { --red:#e02424; --bg:#000; }
   html,body{height:100%;margin:0;background:var(--bg);color:var(--red);font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
-  .stage{position:relative;width:100%;height:100%;overflow:hidden;display:grid;place-items:center}
-  .result{position:absolute;inset:auto 0 10vh 0;text-align:center;font-weight:900;font-size:min(22vmin,180px);letter-spacing:.02em;pointer-events:none;text-shadow:0 0 24px rgba(224,36,36,.35)}
+  .stage{position:relative;width:100%;height:100%;overflow:hidden}
+  .result{position:absolute;inset:auto 0 8vh 0;text-align:center;font-weight:900;font-size:min(22vmin,180px);letter-spacing:.02em;pointer-events:none;text-shadow:0 0 24px rgba(224,36,36,.35)}
   .hint{position:absolute;bottom:1rem;left:50%;transform:translateX(-50%);opacity:.7}
-  /* Die container that we animate */
-  .dieWrap{position:absolute;top:55%;left:-20vmin;width:min(22vmin,160px);height:min(22vmin,160px);display:grid;place-items:center;filter:drop-shadow(0 0 14px rgba(224,36,36,.4))}
-  .rolling{animation: roll 1.8s cubic-bezier(.2,.7,.2,1) forwards}
-  @keyframes roll{
-    0%{ transform: translateX(0) rotate(0deg) translateY(0) }
-    70%{ transform: translateX(110vw) rotate(900deg) translateY(-3vmin) }
-    100%{ transform: translateX(120vw) rotate(1080deg) translateY(0) }
-  }
-  /* Built-in SVG styling */
+  .btn{position:absolute;top:1rem;right:1rem;background:transparent;border:2px solid var(--red);color:var(--red);
+       padding:.5rem 1rem;border-radius:999px;cursor:pointer}
+  .btn:active{transform:translateY(1px)}
+  .dieWrap{position:absolute;width:min(22vmin,160px);height:min(22vmin,160px);display:grid;place-items:center;
+           will-change:transform;filter:drop-shadow(0 0 14px rgba(224,36,36,.4))}
   svg{width:100%;height:100%}
   .d20{stroke:var(--red);fill:#0a0a0a;stroke-width:2}
   .facet{fill:#120000}
   .edge{stroke:var(--red);stroke-opacity:.65}
-  /* Button */
-  .btn{position:absolute;top:1rem;right:1rem;background:transparent;border:2px solid var(--red);color:var(--red);
-       padding:.5rem 1rem;border-radius:999px;cursor:pointer}
-  .btn:active{transform:translateY(1px)}
 </style>
 </head>
 <body>
   <div class="stage" id="stage" aria-live="polite">
     <button class="btn" id="rollBtn">Roll d20</button>
 
-    <!-- Animated die (tries die.png first, otherwise uses inline SVG) -->
     <div class="dieWrap" id="dieWrap" aria-hidden="true">
       <img id="dieImg" alt="d20" style="display:none;width:100%;height:100%;object-fit:contain;image-rendering:crisp-edges" src="die.png">
-      <!-- fallback SVG: stylized d20 (wireframe with facets) -->
+      <!-- fallback SVG d20 -->
       <svg id="dieSvg" viewBox="-52 -52 104 104" role="img" aria-label="d20">
         <g class="d20">
-          <!-- rough icosahedron-ish look: outer, inner, edges -->
           <polygon class="facet" points="0,-48 28,-38 45,-12 36,22 8,46 -8,46 -36,22 -45,-12 -28,-38 0,-48"/>
           <g class="edge" fill="none">
             <polygon points="0,-48 28,-38 45,-12 36,22 8,46 -8,46 -36,22 -45,-12 -28,-38 0,-48"/>
@@ -54,69 +44,148 @@
   </div>
 
 <script>
+  const stage = document.getElementById('stage');
   const dieWrap = document.getElementById('dieWrap');
   const dieImg = document.getElementById('dieImg');
   const dieSvg = document.getElementById('dieSvg');
   const resultEl = document.getElementById('result');
   const btn = document.getElementById('rollBtn');
 
-  // Try to use die.png if present; else fallback to SVG
+  // Prefer die.png if present
   dieImg.addEventListener('load', ()=>{ dieImg.style.display='block'; dieSvg.style.display='none'; });
   dieImg.addEventListener('error', ()=>{ dieImg.style.display='none'; dieSvg.style.display='block'; });
 
+  const PAD_VMIN = 3; // keep the die away from the edges
+  function px(v){ return v; }
+
   function rand20(){ return Math.floor(Math.random()*20)+1; }
 
-  let spinning=false, flickerTimer=null;
+  // Choose a direction and start/end points that ALWAYS stay inside the viewport
+  function pickPath() {
+    const rect = stage.getBoundingClientRect();
+    const W = rect.width, H = rect.height;
+
+    // die size in px (after CSS)
+    const dRect = dieWrap.getBoundingClientRect();
+    const DW = dRect.width, DH = dRect.height;
+
+    const pad = Math.max(W, H) * (PAD_VMIN / 100); // convert vmin-ish to px
+
+    const xmin = pad, xmax = W - DW - pad;
+    const ymin = pad, ymax = H - DH - pad;
+
+    // 8 directions: L→R, R→L, T→B, B→T, TL→BR, BR→TL, TR→BL, BL→TR
+    const dirs = [
+      'LR','RL','TB','BT','TLBR','BRTL','TRBL','BLTR'
+    ];
+    const dir = dirs[Math.floor(Math.random()*dirs.length)];
+
+    let x0, y0, x1, y1;
+
+    switch(dir){
+      case 'LR':
+        x0 = xmin; x1 = xmax;
+        y0 = y1 = ymin + Math.random()*(ymax - ymin);
+        break;
+      case 'RL':
+        x0 = xmax; x1 = xmin;
+        y0 = y1 = ymin + Math.random()*(ymax - ymin);
+        break;
+      case 'TB':
+        y0 = ymin; y1 = ymax;
+        x0 = x1 = xmin + Math.random()*(xmax - xmin);
+        break;
+      case 'BT':
+        y0 = ymax; y1 = ymin;
+        x0 = x1 = xmin + Math.random()*(xmax - xmin);
+        break;
+      case 'TLBR':
+        x0 = xmin; y0 = ymin; x1 = xmax; y1 = ymax; break;
+      case 'BRTL':
+        x0 = xmax; y0 = ymax; x1 = xmin; y1 = ymin; break;
+      case 'TRBL':
+        x0 = xmax; y0 = ymin; x1 = xmin; y1 = ymax; break;
+      case 'BLTR':
+        x0 = xmin; y0 = ymax; x1 = xmax; y1 = ymin; break;
+    }
+
+    // spin amount based on distance
+    const dx = x1 - x0, dy = y1 - y0;
+    const dist = Math.hypot(dx, dy);
+    const spins = (dist / Math.min(W, H)) * (2 + Math.random()*2); // 2–4 spins-ish
+    const dirSign = Math.random() < 0.5 ? 1 : -1;
+
+    return { x0, y0, x1, y1, spins: spins*dirSign };
+  }
+
+  let spinning = false;
+
   function roll(){
     if(spinning) return;
     spinning = true;
+
     resultEl.textContent = '…';
 
-    // restart animation
-    dieWrap.classList.remove('rolling');
-    // force reflow to restart keyframes
-    void dieWrap.offsetWidth;
-    dieWrap.classList.add('rolling');
+    const { x0,y0,x1,y1,spins } = pickPath();
 
-    // number flicker during roll
-    const start = performance.now();
-    const dur = 1800;
-    let last = 0;
+    // place at start
+    let t0 = 0;
+    const dur = 1600; // ms
+    const startDeg = Math.floor(Math.random()*360);
 
-    function tick(t){
-      const elapsed = t - start;
-      const p = Math.min(elapsed/dur,1);
-      // faster at start, slower near end
-      const interval = 40 + 260 * p*p;
-      if(!tick.last || (t - tick.last) > interval){
-        let n = rand20(); if(n===last) n = (n%20)+1; last=n;
-        resultEl.textContent = n;
-        tick.last = t;
+    function easeOutCubic(p){ return 1 - Math.pow(1-p,3); }
+
+    function frame(ts){
+      if(!t0) t0 = ts;
+      const elapsed = ts - t0;
+      const p = Math.min(elapsed / dur, 1);
+      const e = easeOutCubic(p);
+
+      const x = x0 + (x1 - x0) * e;
+      const y = y0 + (y1 - y0) * e;
+      const rot = startDeg + spins * 360 * e;
+
+      dieWrap.style.transform = `translate3d(${px(x)}px, ${px(y)}px, 0) rotate(${rot}deg)`;
+
+      // flicker numbers while rolling
+      if (Math.random() < (1 - e) * 0.5) {
+        resultEl.textContent = rand20();
       }
-      if(p<1) requestAnimationFrame(tick);
-    }
-    requestAnimationFrame(tick);
 
-    // settle result at end
-    setTimeout(()=>{
-      const final = rand20();
-      resultEl.textContent = final;
-      spinning = false;
-    }, dur);
+      if (p < 1) {
+        requestAnimationFrame(frame);
+      } else {
+        const final = rand20();
+        resultEl.textContent = final;
+        spinning = false;
+      }
+    }
+
+    requestAnimationFrame(frame);
   }
 
   window.addEventListener('load', ()=>{
-    // probe die.png
-    if (!dieImg.complete) dieImg.src = 'die.png'; // trigger
+    if (!dieImg.complete) dieImg.src = 'die.png'; // probe
+    // ensure first position is valid before anim
+    const rect = stage.getBoundingClientRect();
+    dieWrap.style.left = '0px'; // left/top are neutral; we use transforms for movement
+    dieWrap.style.top = '0px';
     roll();
   });
 
   btn.addEventListener('click', roll);
   document.addEventListener('keydown', e=>{ if(e.key.toLowerCase()==='r') roll(); });
-  document.getElementById('stage').addEventListener('click', e=>{
+  stage.addEventListener('click', e=>{
     if(e.target.closest('#rollBtn')) return;
     roll();
   }, {passive:true});
+
+  // Re-roll on resize to adapt to new viewport (keeps die visible after orientation change)
+  let resizeTO;
+  window.addEventListener('resize', ()=>{
+    clearTimeout(resizeTO);
+    resizeTO = setTimeout(()=>{ if(!spinning) roll(); }, 150);
+  });
 </script>
 </body>
 </html>
