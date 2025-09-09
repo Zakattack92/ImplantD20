@@ -1,121 +1,122 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>d20 Roll</title>
-  <style>
-    :root { --red:#e02424; --bg:#000; }
-    html,body { height:100%; margin:0; background:var(--bg); color:var(--red); }
-    body { display:grid; place-items:center; font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif; }
-    .wrap { text-align:center; user-select:none; }
-    .svgbox { width:min(80vmin,520px); height:min(80vmin,520px); margin:auto; display:block; }
-    .num { font-size:min(18vmin,160px); font-weight:800; letter-spacing:0.02em; }
-    .label { margin-top:0.5rem; opacity:0.85 }
-    .btn { margin-top:1rem; font-size:1rem; background:transparent; border:2px solid var(--red);
-           color:var(--red); padding:.5rem 1rem; border-radius:999px; cursor:pointer; }
-    .btn:active { transform:translateY(1px) }
-    /* Subtle glow */
-    .glow { filter: drop-shadow(0 0 12px rgba(224,36,36,.35)); }
-  </style>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>d20 Roll</title>
+<style>
+  :root { --red:#e02424; --bg:#000; }
+  html,body{height:100%;margin:0;background:var(--bg);color:var(--red);font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+  .stage{position:relative;width:100%;height:100%;overflow:hidden;display:grid;place-items:center}
+  .result{position:absolute;inset:auto 0 10vh 0;text-align:center;font-weight:900;font-size:min(22vmin,180px);letter-spacing:.02em;pointer-events:none;text-shadow:0 0 24px rgba(224,36,36,.35)}
+  .hint{position:absolute;bottom:1rem;left:50%;transform:translateX(-50%);opacity:.7}
+  /* Die container that we animate */
+  .dieWrap{position:absolute;top:55%;left:-20vmin;width:min(22vmin,160px);height:min(22vmin,160px);display:grid;place-items:center;filter:drop-shadow(0 0 14px rgba(224,36,36,.4))}
+  .rolling{animation: roll 1.8s cubic-bezier(.2,.7,.2,1) forwards}
+  @keyframes roll{
+    0%{ transform: translateX(0) rotate(0deg) translateY(0) }
+    70%{ transform: translateX(110vw) rotate(900deg) translateY(-3vmin) }
+    100%{ transform: translateX(120vw) rotate(1080deg) translateY(0) }
+  }
+  /* Built-in SVG styling */
+  svg{width:100%;height:100%}
+  .d20{stroke:var(--red);fill:#0a0a0a;stroke-width:2}
+  .facet{fill:#120000}
+  .edge{stroke:var(--red);stroke-opacity:.65}
+  /* Button */
+  .btn{position:absolute;top:1rem;right:1rem;background:transparent;border:2px solid var(--red);color:var(--red);
+       padding:.5rem 1rem;border-radius:999px;cursor:pointer}
+  .btn:active{transform:translateY(1px)}
+</style>
 </head>
 <body>
-  <div class="wrap" id="app" aria-live="polite">
-    <svg class="svgbox glow" viewBox="-55 -55 110 110" role="img" aria-label="d20">
-      <!-- Generated 20-gon + inner lines -->
-      <g id="die" stroke="var(--red)" fill="none" stroke-width="2" stroke-linejoin="round"></g>
-    </svg>
-
-    <div class="num" id="result">—</div>
-    <div class="label" id="status">Tap or press R to roll</div>
+  <div class="stage" id="stage" aria-live="polite">
     <button class="btn" id="rollBtn">Roll d20</button>
+
+    <!-- Animated die (tries die.png first, otherwise uses inline SVG) -->
+    <div class="dieWrap" id="dieWrap" aria-hidden="true">
+      <img id="dieImg" alt="d20" style="display:none;width:100%;height:100%;object-fit:contain;image-rendering:crisp-edges" src="die.png">
+      <!-- fallback SVG: stylized d20 (wireframe with facets) -->
+      <svg id="dieSvg" viewBox="-52 -52 104 104" role="img" aria-label="d20">
+        <g class="d20">
+          <!-- rough icosahedron-ish look: outer, inner, edges -->
+          <polygon class="facet" points="0,-48 28,-38 45,-12 36,22 8,46 -8,46 -36,22 -45,-12 -28,-38 0,-48"/>
+          <g class="edge" fill="none">
+            <polygon points="0,-48 28,-38 45,-12 36,22 8,46 -8,46 -36,22 -45,-12 -28,-38 0,-48"/>
+            <path d="M0,-48 L0,8 M28,-38 L0,8 M-28,-38 L0,8 M45,-12 L-8,46 M-45,-12 L8,46 M36,22 L-36,22"/>
+          </g>
+        </g>
+      </svg>
+    </div>
+
+    <div class="result" id="result">—</div>
+    <div class="hint" id="hint">Tap / click / press R to roll</div>
   </div>
 
-  <script>
-    // --- draw a regular 20-gon (d20-ish token) and some chords for visual interest ---
-    const g = document.getElementById('die');
-    const sides = 20, R = 48;
-    const pts = [...Array(sides)].map((_,i)=>{
-      const a = (i/sides)*Math.PI*2 - Math.PI/2;
-      return [Math.cos(a)*R, Math.sin(a)*R];
-    });
-    const poly = document.createElementNS('http://www.w3.org/2000/svg','polygon');
-    poly.setAttribute('points', pts.map(p=>p.join(',')).join(' '));
-    g.appendChild(poly);
-    // add a few chords (not all; keep it light)
-    for (let k of [3,7,9]) {
-      for (let i=0;i<sides;i++) {
-        const j=(i+k)%sides;
-        const l = document.createElementNS('http://www.w3.org/2000/svg','line');
-        l.setAttribute('x1', pts[i][0]); l.setAttribute('y1', pts[i][1]);
-        l.setAttribute('x2', pts[j][0]); l.setAttribute('y2', pts[j][1]);
-        l.setAttribute('stroke-opacity','0.25');
-        l.setAttribute('stroke-width','1');
-        g.appendChild(l);
+<script>
+  const dieWrap = document.getElementById('dieWrap');
+  const dieImg = document.getElementById('dieImg');
+  const dieSvg = document.getElementById('dieSvg');
+  const resultEl = document.getElementById('result');
+  const btn = document.getElementById('rollBtn');
+
+  // Try to use die.png if present; else fallback to SVG
+  dieImg.addEventListener('load', ()=>{ dieImg.style.display='block'; dieSvg.style.display='none'; });
+  dieImg.addEventListener('error', ()=>{ dieImg.style.display='none'; dieSvg.style.display='block'; });
+
+  function rand20(){ return Math.floor(Math.random()*20)+1; }
+
+  let spinning=false, flickerTimer=null;
+  function roll(){
+    if(spinning) return;
+    spinning = true;
+    resultEl.textContent = '…';
+
+    // restart animation
+    dieWrap.classList.remove('rolling');
+    // force reflow to restart keyframes
+    void dieWrap.offsetWidth;
+    dieWrap.classList.add('rolling');
+
+    // number flicker during roll
+    const start = performance.now();
+    const dur = 1800;
+    let last = 0;
+
+    function tick(t){
+      const elapsed = t - start;
+      const p = Math.min(elapsed/dur,1);
+      // faster at start, slower near end
+      const interval = 40 + 260 * p*p;
+      if(!tick.last || (t - tick.last) > interval){
+        let n = rand20(); if(n===last) n = (n%20)+1; last=n;
+        resultEl.textContent = n;
+        tick.last = t;
       }
+      if(p<1) requestAnimationFrame(tick);
     }
+    requestAnimationFrame(tick);
 
-    const resultEl = document.getElementById('result');
-    const statusEl = document.getElementById('status');
-    const btn = document.getElementById('rollBtn');
+    // settle result at end
+    setTimeout(()=>{
+      const final = rand20();
+      resultEl.textContent = final;
+      spinning = false;
+    }, dur);
+  }
 
-    let spinning = false, rafId = 0, startT = 0;
+  window.addEventListener('load', ()=>{
+    // probe die.png
+    if (!dieImg.complete) dieImg.src = 'die.png'; // trigger
+    roll();
+  });
 
-    function rand20(){ return Math.floor(Math.random()*20)+1; }
-
-    function roll() {
-      if (spinning) return;
-      spinning = true;
-      startT = performance.now();
-      statusEl.textContent = 'Rolling…';
-      let lastNum = 0;
-
-      // spin + flicker numbers for ~1.2s with ease-out
-      const dur = 1200;
-      const baseSpeed = 22; // numbers/second baseline
-
-      const tick = (t)=>{
-        const elapsed = t - startT;
-        // ease-out rotation
-        const prog = Math.min(elapsed/dur, 1);
-        const ease = 1 - Math.pow(1 - prog, 3);
-        const rot = 900 * (1 - ease); // degrees, decelerating to 0
-        g.setAttribute('transform', `rotate(${rot})`);
-
-        // speed taper
-        const speed = baseSpeed * (1 - ease) + 6;
-        if (elapsed - (resultEl._lastChange||0) > (1000/speed)) {
-          let n = rand20();
-          if (n===lastNum) n = (n%20)+1; // avoid same-number flashes
-          lastNum = n;
-          resultEl.textContent = n;
-          resultEl._lastChange = elapsed;
-        }
-
-        if (elapsed < dur) {
-          rafId = requestAnimationFrame(tick);
-        } else {
-          // final settle
-          const final = rand20();
-          resultEl.textContent = final;
-          statusEl.textContent = `Result: ${final}`;
-          g.setAttribute('transform', 'rotate(0)');
-          spinning = false;
-        }
-      };
-      cancelAnimationFrame(rafId);
-      rafId = requestAnimationFrame(tick);
-    }
-
-    // Auto-roll on load; tap/click/press R to roll again.
-    window.addEventListener('load', roll);
-    btn.addEventListener('click', roll);
-    document.addEventListener('keydown', (e)=>{ if (e.key.toLowerCase()==='r') roll(); });
-    document.getElementById('app').addEventListener('click', (e)=>{
-      if (e.target === btn) return; // button already handled
-      roll();
-    }, {passive:true});
-  </script>
+  btn.addEventListener('click', roll);
+  document.addEventListener('keydown', e=>{ if(e.key.toLowerCase()==='r') roll(); });
+  document.getElementById('stage').addEventListener('click', e=>{
+    if(e.target.closest('#rollBtn')) return;
+    roll();
+  }, {passive:true});
+</script>
 </body>
 </html>
-
