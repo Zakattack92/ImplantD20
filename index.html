@@ -19,6 +19,32 @@
   .d20{stroke:var(--red);fill:#0a0a0a;stroke-width:2}
   .facet{fill:#120000}
   .edge{stroke:var(--red);stroke-opacity:.65}
+
+  /* Crit & Fumble effects */
+  .pulse { animation: pulse 900ms ease-out; }
+  @keyframes pulse { 0%{text-shadow:0 0 0 rgba(224,36,36,0)} 50%{text-shadow:0 0 40px rgba(224,36,36,.8)} 100%{text-shadow:0 0 0 rgba(224,36,36,0)} }
+  .shake { animation: shake .6s linear 2; }
+  @keyframes shake {
+    0%,100%{ transform: translate3d(0,0,0) }
+    20%{ transform: translate3d(-6px,2px,0) }
+    40%{ transform: translate3d(7px,-3px,0) }
+    60%{ transform: translate3d(-5px,1px,0) }
+    80%{ transform: translate3d(4px,0,0) }
+  }
+  .flash { position:fixed;inset:0;background:rgba(224,36,36,.18);pointer-events:none;animation: fade 700ms ease-out forwards }
+  @keyframes fade { from{opacity:1} to{opacity:0} }
+
+  /* Confetti pieces (all red tones) */
+  .confetti{ position:fixed; top:-10vh; width:6px; height:12px; background:var(--red);
+             transform: translate3d(var(--x,0),-10vh,0) rotate(var(--r,0deg));
+             opacity:.95; will-change:transform,opacity; }
+  .confetti.tiny{ width:4px; height:8px; opacity:.85 }
+  .confetti.big{ width:8px; height:14px; opacity:1 }
+  .confetti.anim { animation: fall var(--t,1400ms) cubic-bezier(.2,.7,.2,1) forwards; }
+  @keyframes fall {
+    0%{ transform: translate3d(var(--x,0),-10vh,0) rotate(var(--r,0deg)) }
+    100%{ transform: translate3d(var(--x2,0), 110vh,0) rotate(var(--r2,720deg)); opacity:0.2 }
+  }
 </style>
 </head>
 <body>
@@ -56,66 +82,34 @@
   dieImg.addEventListener('error', ()=>{ dieImg.style.display='none'; dieSvg.style.display='block'; });
 
   const PAD_VMIN = 3; // keep the die away from the edges
-  function px(v){ return v; }
-
   function rand20(){ return Math.floor(Math.random()*20)+1; }
 
-  // Choose a direction and start/end points that ALWAYS stay inside the viewport
   function pickPath() {
     const rect = stage.getBoundingClientRect();
     const W = rect.width, H = rect.height;
-
-    // die size in px (after CSS)
     const dRect = dieWrap.getBoundingClientRect();
     const DW = dRect.width, DH = dRect.height;
-
-    const pad = Math.max(W, H) * (PAD_VMIN / 100); // convert vmin-ish to px
-
+    const pad = Math.max(W, H) * (PAD_VMIN / 100);
     const xmin = pad, xmax = W - DW - pad;
     const ymin = pad, ymax = H - DH - pad;
 
-    // 8 directions: L→R, R→L, T→B, B→T, TL→BR, BR→TL, TR→BL, BL→TR
-    const dirs = [
-      'LR','RL','TB','BT','TLBR','BRTL','TRBL','BLTR'
-    ];
+    const dirs = ['LR','RL','TB','BT','TLBR','BRTL','TRBL','BLTR'];
     const dir = dirs[Math.floor(Math.random()*dirs.length)];
 
-    let x0, y0, x1, y1;
-
+    let x0,y0,x1,y1;
     switch(dir){
-      case 'LR':
-        x0 = xmin; x1 = xmax;
-        y0 = y1 = ymin + Math.random()*(ymax - ymin);
-        break;
-      case 'RL':
-        x0 = xmax; x1 = xmin;
-        y0 = y1 = ymin + Math.random()*(ymax - ymin);
-        break;
-      case 'TB':
-        y0 = ymin; y1 = ymax;
-        x0 = x1 = xmin + Math.random()*(xmax - xmin);
-        break;
-      case 'BT':
-        y0 = ymax; y1 = ymin;
-        x0 = x1 = xmin + Math.random()*(xmax - xmin);
-        break;
-      case 'TLBR':
-        x0 = xmin; y0 = ymin; x1 = xmax; y1 = ymax; break;
-      case 'BRTL':
-        x0 = xmax; y0 = ymax; x1 = xmin; y1 = ymin; break;
-      case 'TRBL':
-        x0 = xmax; y0 = ymin; x1 = xmin; y1 = ymax; break;
-      case 'BLTR':
-        x0 = xmin; y0 = ymax; x1 = xmax; y1 = ymin; break;
+      case 'LR':  x0=xmin; x1=xmax; y0=y1=ymin+Math.random()*(ymax-ymin); break;
+      case 'RL':  x0=xmax; x1=xmin; y0=y1=ymin+Math.random()*(ymax-ymin); break;
+      case 'TB':  y0=ymin; y1=ymax; x0=x1=xmin+Math.random()*(xmax-xmin); break;
+      case 'BT':  y0=ymax; y1=ymin; x0=x1=xmin+Math.random()*(xmax-xmin); break;
+      case 'TLBR':x0=xmin; y0=ymin; x1=xmax; y1=ymax; break;
+      case 'BRTL':x0=xmax; y0=ymax; x1=xmin; y1=ymin; break;
+      case 'TRBL':x0=xmax; y0=ymin; x1=xmin; y1=ymax; break;
+      case 'BLTR':x0=xmin; y0=ymax; x1=xmax; y1=ymin; break;
     }
-
-    // spin amount based on distance
-    const dx = x1 - x0, dy = y1 - y0;
-    const dist = Math.hypot(dx, dy);
-    const spins = (dist / Math.min(W, H)) * (2 + Math.random()*2); // 2–4 spins-ish
-    const dirSign = Math.random() < 0.5 ? 1 : -1;
-
-    return { x0, y0, x1, y1, spins: spins*dirSign };
+    const dist = Math.hypot(x1-x0, y1-y0);
+    const spins = (dist / Math.min(W,H)) * (2 + Math.random()*2) * (Math.random()<0.5?1:-1);
+    return {x0,y0,x1,y1,spins};
   }
 
   let spinning = false;
@@ -123,56 +117,85 @@
   function roll(){
     if(spinning) return;
     spinning = true;
-
     resultEl.textContent = '…';
+    resultEl.classList.remove('pulse');
 
     const { x0,y0,x1,y1,spins } = pickPath();
-
-    // place at start
     let t0 = 0;
-    const dur = 1600; // ms
+    const dur = 1600;
     const startDeg = Math.floor(Math.random()*360);
-
-    function easeOutCubic(p){ return 1 - Math.pow(1-p,3); }
+    const easeOut = p => 1 - Math.pow(1-p,3);
 
     function frame(ts){
       if(!t0) t0 = ts;
-      const elapsed = ts - t0;
-      const p = Math.min(elapsed / dur, 1);
-      const e = easeOutCubic(p);
-
-      const x = x0 + (x1 - x0) * e;
-      const y = y0 + (y1 - y0) * e;
+      const p = Math.min((ts - t0)/dur, 1);
+      const e = easeOut(p);
+      const x = x0 + (x1-x0) * e;
+      const y = y0 + (y1-y0) * e;
       const rot = startDeg + spins * 360 * e;
 
-      dieWrap.style.transform = `translate3d(${px(x)}px, ${px(y)}px, 0) rotate(${rot}deg)`;
+      dieWrap.style.transform = `translate3d(${x}px, ${y}px, 0) rotate(${rot}deg)`;
+      if (Math.random() < (1 - e) * 0.5) resultEl.textContent = rand20();
 
-      // flicker numbers while rolling
-      if (Math.random() < (1 - e) * 0.5) {
-        resultEl.textContent = rand20();
-      }
-
-      if (p < 1) {
-        requestAnimationFrame(frame);
-      } else {
+      if (p < 1) requestAnimationFrame(frame);
+      else {
         const final = rand20();
         resultEl.textContent = final;
+        endEffects(final);
         spinning = false;
       }
     }
-
     requestAnimationFrame(frame);
   }
 
+  /* ---- Crit/Fumble effects ---- */
+  function endEffects(n){
+    if(n === 20){
+      resultEl.classList.add('pulse');
+      burstConfetti(90);
+    } else if(n === 1){
+      flashAndShake();
+    }
+  }
+
+  function flashAndShake(){
+    stage.classList.add('shake');
+    const overlay = document.createElement('div');
+    overlay.className = 'flash';
+    document.body.appendChild(overlay);
+    overlay.addEventListener('animationend', ()=> overlay.remove());
+    setTimeout(()=> stage.classList.remove('shake'), 1400);
+  }
+
+  function burstConfetti(count=80){
+    const W = window.innerWidth, H = window.innerHeight;
+    for(let i=0;i<count;i++){
+      const c = document.createElement('div');
+      const sizeClass = i%7===0 ? 'big' : (i%5===0 ? 'tiny' : '');
+      c.className = `confetti ${sizeClass} anim`;
+      const x = (W*0.3) + Math.random()*W*0.4;     // center-ish burst
+      const x2 = x + (Math.random()*W*0.5 - W*0.25);
+      const r = Math.floor(Math.random()*360);
+      const r2 = r + (Math.random()*720 - 360);
+      const t = 1100 + Math.random()*900;
+
+      c.style.setProperty('--x', x+'px');
+      c.style.setProperty('--x2', x2+'px');
+      c.style.setProperty('--r', r+'deg');
+      c.style.setProperty('--r2', r2+'deg');
+      c.style.setProperty('--t', t+'ms');
+
+      document.body.appendChild(c);
+      c.addEventListener('animationend', ()=> c.remove());
+    }
+  }
+
+  /* ---- Wiring ---- */
   window.addEventListener('load', ()=>{
     if (!dieImg.complete) dieImg.src = 'die.png'; // probe
-    // ensure first position is valid before anim
-    const rect = stage.getBoundingClientRect();
-    dieWrap.style.left = '0px'; // left/top are neutral; we use transforms for movement
-    dieWrap.style.top = '0px';
+    dieWrap.style.left = '0px'; dieWrap.style.top = '0px';
     roll();
   });
-
   btn.addEventListener('click', roll);
   document.addEventListener('keydown', e=>{ if(e.key.toLowerCase()==='r') roll(); });
   stage.addEventListener('click', e=>{
@@ -180,7 +203,7 @@
     roll();
   }, {passive:true});
 
-  // Re-roll on resize to adapt to new viewport (keeps die visible after orientation change)
+  // Re-roll after orientation/resize
   let resizeTO;
   window.addEventListener('resize', ()=>{
     clearTimeout(resizeTO);
