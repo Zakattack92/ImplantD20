@@ -1,1 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>d20 Roll</title>
+  <style>
+    :root { --red:#e02424; --bg:#000; }
+    html,body { height:100%; margin:0; background:var(--bg); color:var(--red); }
+    body { display:grid; place-items:center; font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif; }
+    .wrap { text-align:center; user-select:none; }
+    .svgbox { width:min(80vmin,520px); height:min(80vmin,520px); margin:auto; display:block; }
+    .num { font-size:min(18vmin,160px); font-weight:800; letter-spacing:0.02em; }
+    .label { margin-top:0.5rem; opacity:0.85 }
+    .btn { margin-top:1rem; font-size:1rem; background:transparent; border:2px solid var(--red);
+           color:var(--red); padding:.5rem 1rem; border-radius:999px; cursor:pointer; }
+    .btn:active { transform:translateY(1px) }
+    /* Subtle glow */
+    .glow { filter: drop-shadow(0 0 12px rgba(224,36,36,.35)); }
+  </style>
+</head>
+<body>
+  <div class="wrap" id="app" aria-live="polite">
+    <svg class="svgbox glow" viewBox="-55 -55 110 110" role="img" aria-label="d20">
+      <!-- Generated 20-gon + inner lines -->
+      <g id="die" stroke="var(--red)" fill="none" stroke-width="2" stroke-linejoin="round"></g>
+    </svg>
+
+    <div class="num" id="result">—</div>
+    <div class="label" id="status">Tap or press R to roll</div>
+    <button class="btn" id="rollBtn">Roll d20</button>
+  </div>
+
+  <script>
+    // --- draw a regular 20-gon (d20-ish token) and some chords for visual interest ---
+    const g = document.getElementById('die');
+    const sides = 20, R = 48;
+    const pts = [...Array(sides)].map((_,i)=>{
+      const a = (i/sides)*Math.PI*2 - Math.PI/2;
+      return [Math.cos(a)*R, Math.sin(a)*R];
+    });
+    const poly = document.createElementNS('http://www.w3.org/2000/svg','polygon');
+    poly.setAttribute('points', pts.map(p=>p.join(',')).join(' '));
+    g.appendChild(poly);
+    // add a few chords (not all; keep it light)
+    for (let k of [3,7,9]) {
+      for (let i=0;i<sides;i++) {
+        const j=(i+k)%sides;
+        const l = document.createElementNS('http://www.w3.org/2000/svg','line');
+        l.setAttribute('x1', pts[i][0]); l.setAttribute('y1', pts[i][1]);
+        l.setAttribute('x2', pts[j][0]); l.setAttribute('y2', pts[j][1]);
+        l.setAttribute('stroke-opacity','0.25');
+        l.setAttribute('stroke-width','1');
+        g.appendChild(l);
+      }
+    }
+
+    const resultEl = document.getElementById('result');
+    const statusEl = document.getElementById('status');
+    const btn = document.getElementById('rollBtn');
+
+    let spinning = false, rafId = 0, startT = 0;
+
+    function rand20(){ return Math.floor(Math.random()*20)+1; }
+
+    function roll() {
+      if (spinning) return;
+      spinning = true;
+      startT = performance.now();
+      statusEl.textContent = 'Rolling…';
+      let lastNum = 0;
+
+      // spin + flicker numbers for ~1.2s with ease-out
+      const dur = 1200;
+      const baseSpeed = 22; // numbers/second baseline
+
+      const tick = (t)=>{
+        const elapsed = t - startT;
+        // ease-out rotation
+        const prog = Math.min(elapsed/dur, 1);
+        const ease = 1 - Math.pow(1 - prog, 3);
+        const rot = 900 * (1 - ease); // degrees, decelerating to 0
+        g.setAttribute('transform', `rotate(${rot})`);
+
+        // speed taper
+        const speed = baseSpeed * (1 - ease) + 6;
+        if (elapsed - (resultEl._lastChange||0) > (1000/speed)) {
+          let n = rand20();
+          if (n===lastNum) n = (n%20)+1; // avoid same-number flashes
+          lastNum = n;
+          resultEl.textContent = n;
+          resultEl._lastChange = elapsed;
+        }
+
+        if (elapsed < dur) {
+          rafId = requestAnimationFrame(tick);
+        } else {
+          // final settle
+          const final = rand20();
+          resultEl.textContent = final;
+          statusEl.textContent = `Result: ${final}`;
+          g.setAttribute('transform', 'rotate(0)');
+          spinning = false;
+        }
+      };
+      cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(tick);
+    }
+
+    // Auto-roll on load; tap/click/press R to roll again.
+    window.addEventListener('load', roll);
+    btn.addEventListener('click', roll);
+    document.addEventListener('keydown', (e)=>{ if (e.key.toLowerCase()==='r') roll(); });
+    document.getElementById('app').addEventListener('click', (e)=>{
+      if (e.target === btn) return; // button already handled
+      roll();
+    }, {passive:true});
+  </script>
+</body>
+</html>
 
